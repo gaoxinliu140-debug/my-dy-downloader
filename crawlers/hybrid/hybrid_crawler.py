@@ -35,48 +35,18 @@ import asyncio
 import re
 import httpx
 
-from crawlers.douyin.web.web_crawler import DouyinWebCrawler  # 导入抖音Web爬虫
 from crawlers.tiktok.web.web_crawler import TikTokWebCrawler  # 导入TikTok Web爬虫
 from crawlers.tiktok.app.app_crawler import TikTokAPPCrawler  # 导入TikTok App爬虫
-from crawlers.bilibili.web.web_crawler import BilibiliWebCrawler  # 导入Bilibili Web爬虫
 
 
 class HybridCrawler:
     def __init__(self):
-        self.DouyinWebCrawler = DouyinWebCrawler()
         self.TikTokWebCrawler = TikTokWebCrawler()
         self.TikTokAPPCrawler = TikTokAPPCrawler()
-        self.BilibiliWebCrawler = BilibiliWebCrawler()
-
-    async def get_bilibili_bv_id(self, url: str) -> str:
-        """
-        从 Bilibili URL 中提取 BV 号，支持短链重定向
-        """
-        # 如果是 b23.tv 短链，需要重定向获取真实URL
-        if "b23.tv" in url:
-            async with httpx.AsyncClient() as client:
-                response = await client.head(url, follow_redirects=True)
-                url = str(response.url)
-        
-        # 从URL中提取BV号
-        bv_pattern = r'(?:video\/|\/)(BV[A-Za-z0-9]+)'
-        match = re.search(bv_pattern, url)
-        if match:
-            return match.group(1)
-        else:
-            raise ValueError(f"Cannot extract BV ID from URL: {url}")
 
     async def hybrid_parsing_single_video(self, url: str, minimal: bool = False):
-        # 解析抖音视频/Parse Douyin video
-        if "douyin" in url:
-            platform = "douyin"
-            aweme_id = await self.DouyinWebCrawler.get_aweme_id(url)
-            data = await self.DouyinWebCrawler.fetch_one_video(aweme_id)
-            data = data.get("aweme_detail")
-            # $.aweme_detail.aweme_type
-            aweme_type = data.get("aweme_type")
         # 解析TikTok视频/Parse TikTok video
-        elif "tiktok" in url:
+        if "tiktok" in url:
             platform = "tiktok"
             aweme_id = await self.TikTokWebCrawler.get_aweme_id(url)
 
@@ -87,16 +57,8 @@ class HybridCrawler:
             data = await self.TikTokAPPCrawler.fetch_one_video(aweme_id)
             # $.imagePost exists if aweme_type is photo
             aweme_type = data.get("aweme_type")
-        # 解析Bilibili视频/Parse Bilibili video
-        elif "bilibili" in url or "b23.tv" in url:
-            platform = "bilibili"
-            aweme_id = await self.get_bilibili_bv_id(url)  # BV号作为统一的video_id
-            response = await self.BilibiliWebCrawler.fetch_one_video(aweme_id)
-            data = response.get('data', {})  # 提取data部分
-            # Bilibili只有视频类型，aweme_type设为0(video)
-            aweme_type = 0
         else:
-            raise ValueError("hybrid_parsing_single_video: Cannot judge the video source from the URL.")
+            raise ValueError("Only TikTok URLs are supported. Please provide a valid TikTok video URL.")
 
         # 检查是否需要返回最小数据/Check if minimal data is required
         if not minimal:
@@ -106,10 +68,6 @@ class HybridCrawler:
         url_type_code_dict = {
             # common
             0: 'video',
-            # Douyin
-            2: 'image',
-            4: 'video',
-            68: 'image',
             # TikTok
             51: 'video',
             55: 'video',
@@ -129,84 +87,28 @@ class HybridCrawler:
 
         """
         创建已知数据字典(索引相同)，稍后使用.update()方法更新数据
-        Create a known data dictionary (index the same), 
+        Create a known data dictionary (index the same),
         and then use the .update() method to update the data
         """
 
-        # 根据平台适配字段映射
-        if platform == 'bilibili':
-            result_data = {
-                'type': url_type,
-                'platform': platform,
-                'video_id': aweme_id,
-                'desc': data.get("title"),  # Bilibili使用title
-                'create_time': data.get("pubdate"),  # Bilibili使用pubdate
-                'author': data.get("owner"),  # Bilibili使用owner
-                'music': None,  # Bilibili没有音乐信息
-                'statistics': data.get("stat"),  # Bilibili使用stat
-                'cover_data': {},  # 将在各平台处理中填充
-                'hashtags': None,  # Bilibili没有hashtags概念
-            }
-        else:
-            result_data = {
-                'type': url_type,
-                'platform': platform,
-                'video_id': aweme_id,  # 统一使用video_id字段，内容可能是aweme_id或bv_id
-                'desc': data.get("desc"),
-                'create_time': data.get("create_time"),
-                'author': data.get("author"),
-                'music': data.get("music"),
-                'statistics': data.get("statistics"),
-                'cover_data': {},  # 将在各平台处理中填充
-                'hashtags': data.get('text_extra'),
-            }
+        # TikTok data structure
+        result_data = {
+            'type': url_type,
+            'platform': platform,
+            'video_id': aweme_id,
+            'desc': data.get("desc"),
+            'create_time': data.get("create_time"),
+            'author': data.get("author"),
+            'music': data.get("music"),
+            'statistics': data.get("statistics"),
+            'cover_data': {},  # 将在各平台处理中填充
+            'hashtags': data.get('text_extra'),
+        }
         # 创建一个空变量，稍后使用.update()方法更新数据/Create an empty variable and use the .update() method to update the data
         api_data = None
         # 判断链接类型并处理数据/Judge link type and process data
-        # 抖音数据处理/Douyin data processing
-        if platform == 'douyin':
-            # 填充封面数据
-            result_data['cover_data'] = {
-                'cover': data.get("video", {}).get("cover"),
-                'origin_cover': data.get("video", {}).get("origin_cover"),
-                'dynamic_cover': data.get("video", {}).get("dynamic_cover")
-            }
-            # 抖音视频数据处理/Douyin video data processing
-            if url_type == 'video':
-                # 将信息储存在字典中/Store information in a dictionary
-                uri = data['video']['play_addr']['uri']
-                wm_video_url_HQ = data['video']['play_addr']['url_list'][0]
-                wm_video_url = f"https://aweme.snssdk.com/aweme/v1/playwm/?video_id={uri}&radio=1080p&line=0"
-                nwm_video_url_HQ = wm_video_url_HQ.replace('playwm', 'play')
-                nwm_video_url = f"https://aweme.snssdk.com/aweme/v1/play/?video_id={uri}&ratio=1080p&line=0"
-                api_data = {
-                    'video_data':
-                        {
-                            'wm_video_url': wm_video_url,
-                            'wm_video_url_HQ': wm_video_url_HQ,
-                            'nwm_video_url': nwm_video_url,
-                            'nwm_video_url_HQ': nwm_video_url_HQ
-                        }
-                }
-            # 抖音图片数据处理/Douyin image data processing
-            elif url_type == 'image':
-                # 无水印图片列表/No watermark image list
-                no_watermark_image_list = []
-                # 有水印图片列表/With watermark image list
-                watermark_image_list = []
-                # 遍历图片列表/Traverse image list
-                for i in data['images']:
-                    no_watermark_image_list.append(i['url_list'][0])
-                    watermark_image_list.append(i['download_url_list'][0])
-                api_data = {
-                    'image_data':
-                        {
-                            'no_watermark_image_list': no_watermark_image_list,
-                            'watermark_image_list': watermark_image_list
-                        }
-                }
         # TikTok数据处理/TikTok data processing
-        elif platform == 'tiktok':
+        if platform == 'tiktok':
             # 填充封面数据
             result_data['cover_data'] = {
                 'cover': data.get("video", {}).get("cover"),
@@ -251,58 +153,12 @@ class HybridCrawler:
                             'watermark_image_list': watermark_image_list
                         }
                 }
-        # Bilibili数据处理/Bilibili data processing
-        elif platform == 'bilibili':
-            # 填充封面数据
-            result_data['cover_data'] = {
-                'cover': data.get("pic"),  # Bilibili使用pic作为封面
-                'origin_cover': data.get("pic"),
-                'dynamic_cover': data.get("pic")
-            }
-            # Bilibili只有视频，直接处理视频数据
-            if url_type == 'video':
-                # 获取视频播放地址需要额外调用API
-                cid = data.get('cid')  # 获取cid
-                if cid:
-                    # 获取播放链接，cid需要转换为字符串
-                    playurl_data = await self.BilibiliWebCrawler.fetch_video_playurl(aweme_id, str(cid))
-                    # 从播放数据中提取URL
-                    dash = playurl_data.get('data', {}).get('dash', {})
-                    video_list = dash.get('video', [])
-                    audio_list = dash.get('audio', [])
-                    
-                    # 选择最高质量的视频流
-                    video_url = video_list[0].get('baseUrl') if video_list else None
-                    audio_url = audio_list[0].get('baseUrl') if audio_list else None
-                    
-                    api_data = {
-                        'video_data': {
-                            'wm_video_url': video_url,
-                            'wm_video_url_HQ': video_url,
-                            'nwm_video_url': video_url,  # Bilibili没有水印概念
-                            'nwm_video_url_HQ': video_url,
-                            'audio_url': audio_url,  # Bilibili音视频分离
-                            'cid': cid,  # 保存cid供后续使用
-                        }
-                    }
-                else:
-                    api_data = {
-                        'video_data': {
-                            'wm_video_url': None,
-                            'wm_video_url_HQ': None,
-                            'nwm_video_url': None,
-                            'nwm_video_url_HQ': None,
-                            'error': 'Failed to get cid for video playback'
-                        }
-                    }
         # 更新数据/Update data
         result_data.update(api_data)
         return result_data
 
     async def main(self):
-        # 测试混合解析单一视频接口/Test hybrid parsing single video endpoint
-        # url = "https://v.douyin.com/L4FJNR3/"
-        # url = "https://www.tiktok.com/@taylorswift/video/7359655005701311786"
+        # 测试混合解析单一视频接口/Test TikTok parsing single video endpoint
         url = "https://www.tiktok.com/@flukegk83/video/7360734489271700753"
         # url = "https://www.tiktok.com/@minecraft/photo/7369296852669205791"
         minimal = True

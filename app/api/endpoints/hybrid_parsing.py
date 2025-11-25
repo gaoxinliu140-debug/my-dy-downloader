@@ -13,14 +13,14 @@ router = APIRouter()
 
 
 @router.get("/video_data", response_model=ResponseModel, tags=["Hybrid-API"],
-            summary="混合解析单一视频接口/Hybrid parsing single video endpoint")
+            summary="解析TikTok视频接口/TikTok video parsing endpoint")
 async def hybrid_parsing_single_video(request: Request,
-                                      url: str = Query(example="https://v.douyin.com/L4FJNR3/"),
+                                      url: str = Query(example="https://www.tiktok.com/@evil0ctal/video/7156033831819037994"),
                                       minimal: bool = Query(default=False)):
     """
     # [中文]
     ### 用途:
-    - 该接口用于解析抖音/TikTok单一视频的数据。
+    - 该接口用于解析TikTok单一视频的数据。
     ### 参数:
     - `url`: 视频链接、分享链接、分享文本。
     ### 返回:
@@ -28,14 +28,14 @@ async def hybrid_parsing_single_video(request: Request,
 
     # [English]
     ### Purpose:
-    - This endpoint is used to parse data of a single Douyin/TikTok video.
+    - This endpoint is used to parse data of a single TikTok video.
     ### Parameters:
     - `url`: Video link, share link, or share text.
     ### Returns:
     - `data`: Video data.
 
     # [Example]
-    url = "https://v.douyin.com/L4FJNR3/"
+    url = "https://www.tiktok.com/@evil0ctal/video/7156033831819037994"
     """
     try:
         # 解析视频/Parse video
@@ -57,14 +57,14 @@ async def hybrid_parsing_single_video(request: Request,
              response_model=ResponseModel,
              summary="更新Cookie/Update Cookie")
 async def update_cookie_api(request: Request,
-                           service: str = Body(example="douyin", description="服务名称/Service name"),
+                           service: str = Body(example="tiktok", description="服务名称/Service name"),
                            cookie: str = Body(example="YOUR_NEW_COOKIE", description="新的Cookie值/New Cookie value")):
     """
     # [中文]
     ### 用途:
     - 更新指定服务的Cookie
     ### 参数:
-    - service: 服务名称 (如: douyin_web)
+    - service: 服务名称 (如: tiktok)
     - cookie: 新的Cookie值
     ### 返回:
     - 更新结果
@@ -73,24 +73,17 @@ async def update_cookie_api(request: Request,
     ### Purpose:
     - Update Cookie for specified service
     ### Parameters:
-    - service: Service name (e.g.: douyin_web)
+    - service: Service name (e.g.: tiktok)
     - cookie: New Cookie value
     ### Return:
     - Update result
 
     # [示例/Example]
-    service = "douyin_web"
+    service = "tiktok"
     cookie = "YOUR_NEW_COOKIE"
     """
     try:
-        if service == "douyin":
-            from crawlers.douyin.web.web_crawler import DouyinWebCrawler
-            douyin_crawler = DouyinWebCrawler()
-            await douyin_crawler.update_cookie(cookie)
-            return ResponseModel(code=200,
-                                router=request.url.path,
-                                data={"message": f"Cookie for {service} updated successfully"})
-        elif service == "tiktok":
+        if service == "tiktok":
             # 这里可以添加TikTok的cookie更新逻辑
             # from crawlers.tiktok.web.web_crawler import TikTokWebCrawler
             # tiktok_crawler = TikTokWebCrawler()
@@ -98,16 +91,8 @@ async def update_cookie_api(request: Request,
             return ResponseModel(code=200,
                                 router=request.url.path,
                                 data={"message": f"Cookie for {service} will be updated (not implemented yet)"})
-        elif service == "bilibili":
-            # 这里可以添加Bilibili的cookie更新逻辑
-            # from crawlers.bilibili.web.web_crawler import BilibiliWebCrawler
-            # bilibili_crawler = BilibiliWebCrawler()
-            # await bilibili_crawler.update_cookie(cookie)
-            return ResponseModel(code=200,
-                                router=request.url.path,
-                                data={"message": f"Cookie for {service} will be updated (not implemented yet)"})
         else:
-            raise ValueError(f"Service '{service}' is not supported. Supported services: douyin, tiktok, bilibili")
+            raise ValueError(f"Service '{service}' is not supported. Supported services: tiktok")
     except Exception as e:
         status_code = 400
         detail = ErrorResponseModel(code=status_code,

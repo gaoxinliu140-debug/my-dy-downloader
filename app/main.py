@@ -63,11 +63,7 @@ Host_Port = config['API']['Host_Port']
 tags_metadata = [
     {
         "name": "Hybrid-API",
-        "description": "**(混合数据接口/Hybrid-API data endpoints)**",
-    },
-    {
-        "name": "Douyin-Web-API",
-        "description": "**(抖音Web数据接口/Douyin-Web-API data endpoints)**",
+        "description": "**(TikTok数据接口/TikTok data endpoints)**",
     },
     {
         "name": "TikTok-Web-API",
@@ -76,10 +72,6 @@ tags_metadata = [
     {
         "name": "TikTok-App-API",
         "description": "**(TikTok-App-API数据接口/TikTok-App-API data endpoints)**",
-    },
-    {
-        "name": "Bilibili-Web-API",
-        "description": "**(Bilibili-Web-API数据接口/Bilibili-Web-API data endpoints)**",
     },
     {
         "name": "iOS-Shortcut",

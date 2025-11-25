@@ -9,7 +9,7 @@ from typing import Union
 from pathlib import Path
 
 from crawlers.utils.logger import logger
-from crawlers.douyin.web.xbogus import XBogus as XB
+from crawlers.tiktok.web.xbogus import XBogus as XB
 from crawlers.utils.utils import (
     gen_random_str,
     get_timestamp,
