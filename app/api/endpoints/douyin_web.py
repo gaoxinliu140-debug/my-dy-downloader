@@ -566,6 +566,38 @@ async def fetch_video_comments_reply(request: Request,
         raise HTTPException(status_code=status_code, detail=detail.dict())
 
 
+# 获取抖音热榜数据
+@router.get("/fetch_hot_search_result",
+            response_model=ResponseModel,
+            summary="获取抖音热榜数据/Get Douyin hot search data")
+async def fetch_hot_search_result(request: Request):
+    """
+    # [中文]
+    ### 用途:
+    - 获取抖音热榜数据
+    ### 返回:
+    - 热榜数据
+
+    # [English]
+    ### Purpose:
+    - Get Douyin hot search data
+    ### Return:
+    - Hot search data
+    """
+    try:
+        data = await DouyinWebCrawler.fetch_hot_search_result()
+        return ResponseModel(code=200,
+                             router=request.url.path,
+                             data=data)
+    except Exception as e:
+        status_code = 400
+        detail = ErrorResponseModel(code=status_code,
+                                    router=request.url.path,
+                                    params=dict(request.query_params),
+                                    )
+        raise HTTPException(status_code=status_code, detail=detail.dict())
+
+
 # 生成真实msToken
 @router.get("/generate_real_msToken",
             response_model=ResponseModel,
