@@ -1,4 +1,7 @@
+import mimetypes
 import os
+from pathlib import Path
+import re
 import zipfile
 import subprocess
 import tempfile
@@ -20,10 +23,59 @@ config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 with open(config_path, 'r', encoding='utf-8') as file:
     config = yaml.safe_load(file)
 
+DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+}
+SAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]")
+ALLOWED_PLATFORMS = {"douyin", "tiktok", "bilibili"}
+ALLOWED_DATA_TYPES = {"video", "image"}
+ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
+
+
+def sanitize_name(value: str, *, fallback: str) -> str:
+    value = SAFE_NAME_PATTERN.sub("_", (value or "").strip())
+    value = value.strip("._")
+    return value or fallback
+
+
+def resolve_download_dir(platform: str, data_type: str) -> Path:
+    safe_platform = sanitize_name(platform, fallback="unknown")
+    safe_data_type = sanitize_name(data_type, fallback="unknown")
+    if safe_platform not in ALLOWED_PLATFORMS:
+        raise HTTPException(status_code=400, detail="Unsupported platform")
+    if safe_data_type not in ALLOWED_DATA_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported media type")
+
+    base_dir = Path(config.get("API", {}).get("Download_Path", "./download")).resolve()
+    target_dir = (base_dir / f"{safe_platform}_{safe_data_type}").resolve()
+    if base_dir != target_dir and base_dir not in target_dir.parents:
+        raise HTTPException(status_code=500, detail="Invalid download path")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    return target_dir
+
+
+def build_safe_file_path(directory: Path, filename: str) -> Path:
+    candidate = (directory / filename).resolve()
+    if directory != candidate.parent:
+        raise HTTPException(status_code=400, detail="Unsafe file name")
+    return candidate
+
+
+def get_safe_image_extension(content_type: str | None) -> str:
+    if not content_type:
+        return "jpg"
+    mime_type = content_type.split(";", 1)[0].strip().lower()
+    extension = mimetypes.guess_extension(mime_type) or ""
+    extension = extension.lstrip(".").lower()
+    if extension == "jpe":
+        extension = "jpg"
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        return "jpg"
+    return extension
+
+
 async def fetch_data(url: str, headers: dict = None):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    } if headers is None else headers.get('headers')
+    headers = DEFAULT_HEADERS if headers is None else headers.get('headers', DEFAULT_HEADERS)
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()  # 确保响应是成功的
@@ -31,9 +83,7 @@ async def fetch_data(url: str, headers: dict = None):
 
 # 下载视频专用
 async def fetch_data_stream(url: str, request:Request , headers: dict = None, file_path: str = None):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    } if headers is None else headers.get('headers')
+    headers = DEFAULT_HEADERS if headers is None else headers.get('headers', DEFAULT_HEADERS)
     async with httpx.AsyncClient() as client:
         # 启用流式请求
         async with client.stream("GET", url, headers=headers) as response:
@@ -165,21 +215,18 @@ async def download_file_hybrid(request: Request,
     try:
         data_type = data.get('type')
         platform = data.get('platform')
-        video_id = data.get('video_id')  # 改为使用video_id
-        file_prefix = config.get("API").get("Download_File_Prefix") if prefix else ''
-        download_path = os.path.join(config.get("API").get("Download_Path"), f"{platform}_{data_type}")
-
-        # 确保目录存在/Ensure the directory exists
-        os.makedirs(download_path, exist_ok=True)
+        video_id = sanitize_name(str(data.get('video_id')), fallback='media')  # 改为使用video_id
+        file_prefix = sanitize_name(config.get("API", {}).get("Download_File_Prefix", ""), fallback="") if prefix else ""
+        download_dir = resolve_download_dir(platform, data_type)
 
         # 下载视频文件/Download video file
         if data_type == 'video':
             file_name = f"{file_prefix}{platform}_{video_id}.mp4" if not with_watermark else f"{file_prefix}{platform}_{video_id}_watermark.mp4"
-            file_path = os.path.join(download_path, file_name)
+            file_path = build_safe_file_path(download_dir, file_name)
 
             # 判断文件是否存在，存在就直接返回
             if os.path.exists(file_path):
-                return FileResponse(path=file_path, media_type='video/mp4', filename=file_name)
+                return FileResponse(path=str(file_path), media_type='video/mp4', filename=file_name)
 
             # 获取对应平台的headers
             if platform == 'tiktok':
@@ -201,7 +248,7 @@ async def download_file_hybrid(request: Request,
                     )
                 
                 # 使用专门的函数合并音视频
-                success = await merge_bilibili_video_audio(video_url, audio_url, request, file_path, __headers.get('headers'))
+                success = await merge_bilibili_video_audio(video_url, audio_url, request, str(file_path), __headers.get('headers'))
                 if not success:
                     raise HTTPException(
                         status_code=500,
@@ -210,7 +257,7 @@ async def download_file_hybrid(request: Request,
             else:
                 # 其他平台的常规处理
                 url = data.get('video_data').get('nwm_video_url_HQ') if not with_watermark else data.get('video_data').get('wm_video_url_HQ')
-                success = await fetch_data_stream(url, request, headers=__headers, file_path=file_path)
+                success = await fetch_data_stream(url, request, headers=__headers, file_path=str(file_path))
                 if not success:
                     raise HTTPException(
                         status_code=500,
@@ -222,17 +269,17 @@ async def download_file_hybrid(request: Request,
             #     await out_file.write(response.content)
 
             # 返回文件内容
-            return FileResponse(path=file_path, filename=file_name, media_type="video/mp4")
+            return FileResponse(path=str(file_path), filename=file_name, media_type="video/mp4")
 
         # 下载图片文件/Download image file
         elif data_type == 'image':
             # 压缩文件属性/Compress file properties
             zip_file_name = f"{file_prefix}{platform}_{video_id}_images.zip" if not with_watermark else f"{file_prefix}{platform}_{video_id}_images_watermark.zip"
-            zip_file_path = os.path.join(download_path, zip_file_name)
+            zip_file_path = build_safe_file_path(download_dir, zip_file_name)
 
             # 判断文件是否存在，存在就直接返回、
             if os.path.exists(zip_file_path):
-                return FileResponse(path=zip_file_path, filename=zip_file_name, media_type="application/zip")
+                return FileResponse(path=str(zip_file_path), filename=zip_file_name, media_type="application/zip")
 
             # 获取图片文件/Get image file
             urls = data.get('image_data').get('no_watermark_image_list') if not with_watermark else data.get(
@@ -243,22 +290,22 @@ async def download_file_hybrid(request: Request,
                 response = await fetch_data(url)
                 index = int(urls.index(url))
                 content_type = response.headers.get('content-type')
-                file_format = content_type.split('/')[1]
+                file_format = get_safe_image_extension(content_type)
                 file_name = f"{file_prefix}{platform}_{video_id}_{index + 1}.{file_format}" if not with_watermark else f"{file_prefix}{platform}_{video_id}_{index + 1}_watermark.{file_format}"
-                file_path = os.path.join(download_path, file_name)
-                image_file_list.append(file_path)
+                file_path = build_safe_file_path(download_dir, file_name)
+                image_file_list.append(str(file_path))
 
                 # 保存文件/Save file
-                async with aiofiles.open(file_path, 'wb') as out_file:
+                async with aiofiles.open(str(file_path), 'wb') as out_file:
                     await out_file.write(response.content)
 
             # 压缩文件/Compress file
-            with zipfile.ZipFile(zip_file_path, 'w') as zip_file:
+            with zipfile.ZipFile(str(zip_file_path), 'w') as zip_file:
                 for image_file in image_file_list:
                     zip_file.write(image_file, os.path.basename(image_file))
 
             # 返回压缩文件/Return compressed file
-            return FileResponse(path=zip_file_path, filename=zip_file_name, media_type="application/zip")
+            return FileResponse(path=str(zip_file_path), filename=zip_file_name, media_type="application/zip")
 
     # 异常处理/Exception handling
     except Exception as e:
