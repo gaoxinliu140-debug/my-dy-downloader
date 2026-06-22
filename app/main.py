@@ -82,6 +82,14 @@ tags_metadata = [
         "description": "**(Bilibili-Web-API数据接口/Bilibili-Web-API data endpoints)**",
     },
     {
+        "name": "WeChat-MP-API",
+        "description": "**(WeChat Official Account article data endpoints)**",
+    },
+    {
+        "name": "WeChat-Channels-API",
+        "description": "**(WeChat Channels video data endpoints)**",
+    },
+    {
         "name": "iOS-Shortcut",
         "description": "**(iOS快捷指令数据接口/iOS-Shortcut data endpoints)**",
     },
