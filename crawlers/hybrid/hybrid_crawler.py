@@ -39,6 +39,8 @@ from crawlers.douyin.web.web_crawler import DouyinWebCrawler  # 导入抖音Web�
 from crawlers.tiktok.web.web_crawler import TikTokWebCrawler  # 导入TikTok Web爬虫
 from crawlers.tiktok.app.app_crawler import TikTokAPPCrawler  # 导入TikTok App爬虫
 from crawlers.bilibili.web.web_crawler import BilibiliWebCrawler  # 导入Bilibili Web爬虫
+from crawlers.wechat.mp.mp_crawler import WeChatMpCrawler  # WeChat MP article crawler
+from crawlers.wechat.channels.channels_crawler import WeChatChannelsCrawler  # WeChat Channels video crawler
 
 
 class HybridCrawler:
@@ -47,6 +49,8 @@ class HybridCrawler:
         self.TikTokWebCrawler = TikTokWebCrawler()
         self.TikTokAPPCrawler = TikTokAPPCrawler()
         self.BilibiliWebCrawler = BilibiliWebCrawler()
+        self.WeChatMpCrawler = WeChatMpCrawler()
+        self.WeChatChannelsCrawler = WeChatChannelsCrawler()
 
     async def get_bilibili_bv_id(self, url: str) -> str:
         """
@@ -95,6 +99,12 @@ class HybridCrawler:
             data = response.get('data', {})  # 提取data部分
             # Bilibili只有视频类型，aweme_type设为0(video)
             aweme_type = 0
+        # Parse WeChat Official Account (MP) article
+        elif "mp.weixin.qq.com" in url:
+            return await self.WeChatMpCrawler.fetch_article(url)
+        # Parse WeChat Channels (shipinhao) video
+        elif "channels.weixin.qq.com" in url or "weixin.qq.com/sph" in url or "finder.video.qq.com" in url:
+            return await self.WeChatChannelsCrawler.fetch_video(url)
         else:
             raise ValueError("hybrid_parsing_single_video: Cannot judge the video source from the URL.")
 

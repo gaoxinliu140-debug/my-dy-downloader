@@ -49,6 +49,7 @@ async def hybrid_parsing_single_video(request: Request,
         detail = ErrorResponseModel(code=status_code,
                                     router=request.url.path,
                                     params=dict(request.query_params),
+                                    message=str(e)
                                     )
         raise HTTPException(status_code=status_code, detail=detail.dict())
 
@@ -106,12 +107,27 @@ async def update_cookie_api(request: Request,
             return ResponseModel(code=200,
                                 router=request.url.path,
                                 data={"message": f"Cookie for {service} will be updated (not implemented yet)"})
+        elif service == "wechat_mp":
+            from crawlers.wechat.mp.mp_crawler import WeChatMpCrawler
+            wechat_mp_crawler = WeChatMpCrawler()
+            await wechat_mp_crawler.update_cookie(cookie)
+            return ResponseModel(code=200,
+                                router=request.url.path,
+                                data={"message": f"Cookie for {service} updated successfully"})
+        elif service == "wechat_channels":
+            from crawlers.wechat.channels.channels_crawler import WeChatChannelsCrawler
+            wechat_channels_crawler = WeChatChannelsCrawler()
+            await wechat_channels_crawler.update_cookie(cookie)
+            return ResponseModel(code=200,
+                                router=request.url.path,
+                                data={"message": f"Cookie for {service} updated successfully"})
         else:
-            raise ValueError(f"Service '{service}' is not supported. Supported services: douyin, tiktok, bilibili")
+            raise ValueError(f"Service '{service}' is not supported. Supported services: douyin, tiktok, bilibili, wechat_mp, wechat_channels")
     except Exception as e:
         status_code = 400
         detail = ErrorResponseModel(code=status_code,
                                     router=request.url.path,
                                     params=dict(request.query_params),
+                                    message=str(e)
                                     )
         raise HTTPException(status_code=status_code, detail=detail.dict())
