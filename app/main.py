@@ -32,7 +32,7 @@
 #
 # ==============================================================================
 
-
+from fastapi.responses import FileResponse
 # FastAPI APP
 import uvicorn
 from fastapi import FastAPI
@@ -130,7 +130,9 @@ app = FastAPI(
     docs_url=docs_url,  # 文档路径
     redoc_url=redoc_url,  # redoc文档路径
 )
-
+@app.get("/", response_class=FileResponse)
+async def read_index():
+    return "static/index.html"
 # API router
 app.include_router(api_router, prefix="/api")
 
