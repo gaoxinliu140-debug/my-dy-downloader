@@ -38,8 +38,8 @@ import uvicorn
 from fastapi import FastAPI
 from app.api.router import router as api_router
 
-# PyWebIO APP
-from app.web.app import MainView
+# # PyWebIO APP
+# from app.web.app import MainView
 from pywebio.platform.fastapi import asgi_app
 
 # OS
@@ -127,19 +127,22 @@ app = FastAPI(
     description=description,
     version=version,
     openapi_tags=tags_metadata,
-    docs_url=docs_url,  # 文档路径
-    redoc_url=redoc_url,  # redoc文档路径
+    docs_url=docs_url,
+    redoc_url=redoc_url,
 )
-@app.get("/", response_class=FileResponse)
-async def read_index():
-    return "static/index.html"
+
 # API router
 app.include_router(api_router, prefix="/api")
 
-# PyWebIO APP
-if config['Web']['PyWebIO_Enable']:
-    webapp = asgi_app(lambda: MainView().main_view())
-    app.mount("/", webapp)
+# 我们自定义的前端页面路由 (加在 api_router 后面即可)
+@app.get("/", response_class=FileResponse)
+async def read_index():
+    return "static/index.html"
+
+# 下面的 PyWebIO APP 部分直接注释掉（加 # 号）或者删掉：
+# if config['Web']['PyWebIO_Enable']:
+#     webapp = asgi_app(lambda: MainView().main_view())
+#     app.mount("/", webapp)
 
 if __name__ == '__main__':
     uvicorn.run(app, host=Host_IP, port=Host_Port)
